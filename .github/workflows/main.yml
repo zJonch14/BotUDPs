@@ -1,4 +1,4 @@
-name: 🚀 Bot UDP
+name: 🚀 Bot UDPs
 
 on:
   workflow_dispatch:
