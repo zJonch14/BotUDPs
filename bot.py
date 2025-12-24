@@ -53,7 +53,6 @@ def get_token():
         print(f"[ERROR] No se pudo guardar {token_file}: {e}")
         return user_token
 
-# ========== BOT CONFIGURADO ==========
 @bot.event
 async def on_ready():
     print(f'[✓] Bot: {bot.user.name}')
