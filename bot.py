@@ -13,7 +13,7 @@ bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None
 
 # ========== SISTEMA DE TOKEN (ENV VAR) ==========
 def get_token():
-    env_token = os.getenv('KEYS')
+    env_token = os.getenv('DISCORD_TOKEN')
 
     if env_token:
         print("[INFO] Token cargado desde la variable de en KEYS")
