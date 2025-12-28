@@ -11,23 +11,47 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None)
 
-# ========== SISTEMA DE TOKEN (ENV VAR) ==========
+# ========== SISTEMA DE TOKEN (ENV VAR or token.txt) ==========
 def get_token():
-    env_token = os.getenv('DISCORD_TOKEN')
+    token_file = 'token.txt'
+    env_token = os.getenv('DISCORD_TOKEN') # Changed to DISCORD_TOKEN
 
     if env_token:
-        print("[INFO] Token cargado desde la variable de en KEYS")
+        print("[INFO] Token cargado desde la variable de entorno 'DISCORD_TOKEN'")
         return env_token
-    else:
-        print("\n" + "="*60)
-        print("CONFIGURACIÓN REQUERIDA")
-        print("="*60)
-        print("1. Discord Developers → Applications → Bot → Copy Token")
-        print("2. Define la variable de entorno 'KEYS'")
-        print("   en tu sistema o en el entorno de ejecución (GitHub Secrets).")
-        print("="*60)
-        print("[ERROR] Token no proporcionado en la variable de entorno 'KEYS'")
+    elif os.path.exists(token_file):
+        try:
+            with open(token_file, 'r') as f:
+                file_token = f.read().strip()
+                if file_token:
+                    print(f"[INFO] Token cargado desde {token_file}")
+                    return file_token
+        except Exception as e:
+            print(f"[ERROR] No se pudo leer {token_file}: {e}")
+
+    print("\n" + "="*60)
+    print("CONFIGURACIÓN REQUERIDA")
+    print("="*60)
+    print("1. Discord Developers → Applications → Bot → Copy Token")
+    print("2. Opción 1: Define la variable de entorno 'DISCORD_TOKEN'")
+    print("   Opción 2: Pega el token aquí (se guarda en token.txt)")
+    print("="*60)
+
+    import getpass
+    user_token = getpass.getpass("Token del bot: ").strip()
+
+    if not user_token:
+        print("[ERROR] Token no proporcionado")
         exit(1)
+
+    try:
+        with open(token_file, 'w') as f:
+            f.write(user_token)
+        print(f"[INFO] Token guardado en {token_file}")
+        return user_token
+    except Exception as e:
+        print(f"[ERROR] No se pudo guardar {token_file}: {e}")
+        return user_token
 
 @bot.event
 async def on_ready():
@@ -191,7 +215,7 @@ if __name__ == "__main__":
     TOKEN = get_token()
 
     if not TOKEN or len(TOKEN) < 10:
-        print("[ERROR] Token inválido. Verifica la variable de entorno DISCORD_TOKEN")
+        print("[ERROR] Token inválido")
         exit(1)
 
     print("[INFO] Métodos disponibles:")
@@ -210,7 +234,7 @@ if __name__ == "__main__":
     try:
         bot.run(TOKEN)
     except discord.LoginFailure:
-        print("[ERROR] Token incorrecto. Verifica la variable de entorno DISCORD_TOKEN")
+        print("[ERROR] Token incorrecto. Borra token.txt")
         exit(1)
     except Exception as e:
         print(f"[ERROR] {e}")
