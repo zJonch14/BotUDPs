@@ -13,20 +13,20 @@ bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None
 
 # ========== SISTEMA DE TOKEN (ENV VAR) ==========
 def get_token():
-    env_token = os.getenv('DISCORD_TOKEN')
+    env_token = os.getenv('KEYS')
 
     if env_token:
-        print("[INFO] Token cargado desde la variable de entorno 'DISCORD_TOKEN'")
+        print("[INFO] Token cargado desde la variable de en KEYS")
         return env_token
     else:
         print("\n" + "="*60)
         print("CONFIGURACIÓN REQUERIDA")
         print("="*60)
         print("1. Discord Developers → Applications → Bot → Copy Token")
-        print("2. Define la variable de entorno 'DISCORD_TOKEN'")
+        print("2. Define la variable de entorno 'KEYS'")
         print("   en tu sistema o en el entorno de ejecución (GitHub Secrets).")
         print("="*60)
-        print("[ERROR] Token no proporcionado en la variable de entorno 'DISCORD_TOKEN'")
+        print("[ERROR] Token no proporcionado en la variable de entorno 'KEYS'")
         exit(1)
 
 @bot.event
